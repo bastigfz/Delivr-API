@@ -83,6 +83,7 @@ All configuration is environment-based (see [`example.env`](./example.env)):
 | `DLA_API_HOST` | Bind address | `::` |
 | `DLA_API_PORT` | Listen port | `14123` |
 | `DLA_DISABLE_DOCS` | Disable the Scalar API reference | `false` |
+| `DLA_MAX_ATTACHMENT_SIZE_MB` | Maximum combined attachment size per composed mail, in MB | `25` |
 | `DLA_ENCRYPTION_KEY` | **Required. 32-character** key for credential encryption | — |
 | `DLA_DB_CONNECTION_URL` | Database connection string / path | `./data/db.sqlite` |
 | `DLA_DB_AUTO_MIGRATE` | Run migrations on startup | `true` |
