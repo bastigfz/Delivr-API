@@ -1740,6 +1740,22 @@ describe("Mail Mailbox Mails Routes", async () => {
         expect(attachments[0]?.filename).toBe("note.txt");
     });
 
+    test("PUT rejects updates to the server-managed recent flag", async () => {
+        const response = await API.getApp().request(
+            `/v1/mail-accounts/${mailAccountID}/mailboxes/INBOX/mails/${multipartDraftUID}`,
+            {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${session_token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ flags: { recent: false } })
+            }
+        );
+
+        expect(response.status).toBe(400);
+    });
+
     test("POST /v1/mail-accounts/:mailAccountID/mailboxes/:mailboxPath/mails rejects multipart requests without mail data", async () => {
         const form = new FormData();
         form.append("attachments", new File(["attachment body"], "note.txt", { type: "text/plain" }));
@@ -1795,7 +1811,7 @@ describe("Mail Mailbox Mails Routes", async () => {
             body: { text: "This request must be rejected" },
             flags: { draft: true }
         }));
-        form.append("attachments", new File([new Uint8Array(26 * 1024 * 1024)], "too-large.bin", {
+        form.append("attachments", new File([new Uint8Array(25 * 1024 * 1024 + 1)], "too-large.bin", {
             type: "application/octet-stream"
         }));
 
