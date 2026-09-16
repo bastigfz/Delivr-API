@@ -17,7 +17,6 @@ import { MailRessource } from "../../../../../../../utils/mails/ressources/mail"
 import MailComposer from "nodemailer/lib/mail-composer";
 import { MailParser } from "../../../../../../../utils/mails/parser";
 import { ConfigHandler } from "../../../../../../../utils/config";
-import type { OpenAPIV3_1 } from "openapi-types";
 
 
 
@@ -35,7 +34,9 @@ type ComposerAttachment = {
 };
 
 const DEFAULT_MAX_ATTACHMENT_SIZE_MB = 25;
-const MULTIPART_BODY_OVERHEAD_BYTES = 1024 * 1024;
+// This is deliberately independent from the attachment limit. It is a final
+// memory-safety guard for multipart parsing, not part of attachment validation.
+const MULTIPART_NON_ATTACHMENT_ALLOWANCE_BYTES = 16 * 1024 * 1024;
 
 /** Combined attachment size allowed on a single mail, in bytes. */
 function maxAttachmentSize(): number {
@@ -52,16 +53,20 @@ function attachmentLimitError(): string {
 }
 
 /**
- * Bound multipart request bodies while they are read. The small allowance above
- * the attachment limit covers the JSON mail field and multipart framing.
+ * Bound multipart request bodies while they are read. Attachment sizes are
+ * validated separately after parsing, so large (but valid) mail JSON does not
+ * consume the configured attachment allowance.
  */
 const enforceMultipartBodyLimit: MiddlewareHandler = async (c, next) => {
     const contentType = c.req.header('content-type') ?? '';
     if (!contentType.toLowerCase().includes('multipart/form-data')) return next();
 
     return bodyLimit({
-        maxSize: maxAttachmentSize() + MULTIPART_BODY_OVERHEAD_BYTES,
-        onError: context => APIResponse.badRequest(context, attachmentLimitError())
+        maxSize: maxAttachmentSize() + MULTIPART_NON_ATTACHMENT_ALLOWANCE_BYTES,
+        onError: context => APIResponse.badRequest(
+            context,
+            `Multipart request exceeds the maximum size of ${(maxAttachmentSize() + MULTIPART_NON_ATTACHMENT_ALLOWANCE_BYTES) / (1024 * 1024)} MB`
+        )
     })(c, next);
 };
 
@@ -203,7 +208,7 @@ router.post('/',
         requestBody: {
             required: true,
             content: {
-                "application/json": { schema: resolver(MailsModel.Create.Body).toJSONSchema() as OpenAPIV3_1.SchemaObject },
+                "application/json": { schema: resolver(MailsModel.Create.Body) },
                 "multipart/form-data": { schema: MailsModel.Create.MultipartSchema }
             }
         },
@@ -372,7 +377,11 @@ router.put('/:mailUID',
                     content: Buffer.from(attachment.content),
                     contentType: attachment.contentType,
                     cid: attachment.contentId,
-                    contentDisposition: attachment.contentDisposition === 'inline' ? 'inline' : 'attachment'
+                    contentDisposition: attachment.contentDisposition === 'inline'
+                        ? 'inline'
+                        : attachment.contentDisposition === 'attachment'
+                            ? 'attachment'
+                            : undefined
                 } satisfies ComposerAttachment));
 
                 const composerOptions = {
@@ -636,4 +645,3 @@ router.delete('/:mailUID',
 );
 
 router.route('/:mailUID/attachments', attachmentsRouter);
-
